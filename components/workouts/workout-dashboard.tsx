@@ -57,9 +57,12 @@ export function WorkoutDashboard() {
             Generate New Workout
           </Button>
         </DialogTrigger>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[600px]" aria-describedby="workout-generator-desc">
           <DialogHeader>
             <DialogTitle>Generate Workout Plan</DialogTitle>
+            <p id="workout-generator-desc" className="text-sm text-muted-foreground">
+              Create a customized workout plan based on your preferences and schedule.
+            </p>
           </DialogHeader>
           <WorkoutGenerator onGenerate={() => setIsGenerating(true)} />
         </DialogContent>

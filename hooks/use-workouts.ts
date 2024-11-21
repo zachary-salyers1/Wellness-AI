@@ -3,6 +3,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getWorkouts, saveWorkout, completeWorkout, updateWorkout as updateWorkoutApi, WorkoutRecord } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
+import { supabase } from '@/lib/supabase';
+import type { Workout } from '@/types/workout';
 
 export function useWorkouts() {
   const queryClient = useQueryClient();
@@ -14,7 +16,34 @@ export function useWorkouts() {
   });
 
   const createWorkout = useMutation({
-    mutationFn: saveWorkout,
+    mutationFn: async (workout: Omit<Workout, 'id' | 'created_at' | 'user_id'>) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User must be authenticated to create workouts');
+
+      const { data, error } = await supabase
+        .from('workouts')
+        .insert([
+          {
+            title: workout.title,
+            type: workout.type,
+            difficulty: workout.difficulty,
+            exercises: workout.exercises,
+            completed: workout.completed,
+            scheduled_date: workout.scheduledDate,
+            description: workout.description || '',
+            split_type: workout.splitType,
+            user_id: user.id,
+          }
+        ])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+      return data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workouts'] });
       toast({
@@ -23,6 +52,7 @@ export function useWorkouts() {
       });
     },
     onError: (error) => {
+      console.error('Mutation error:', error);
       toast({
         title: "Error",
         description: "Failed to save workout. Please try again.",

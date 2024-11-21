@@ -13,8 +13,12 @@ export type Workout = {
   title: string;
   description?: string;
   exercises: Exercise[];
-  date: string;
+  created_at: string;
+  scheduled_date?: string;
   completed: boolean;
+  completion_date?: string;
   type: 'strength' | 'cardio' | 'flexibility' | 'custom';
   difficulty: 'beginner' | 'intermediate' | 'advanced';
+  split_type?: 'fullBody' | 'upperLower' | 'custom';
+  user_id: string;
 };
