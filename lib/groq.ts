@@ -147,3 +147,113 @@ Return as parseable JSON matching the example format.`
     throw new Error(error.message || 'Failed to generate workout plan');
   }
 }
+
+export async function generateNutritionPlan(params: {
+  targetCalories: number;
+  mealsPerDay: number;
+  dietType: string;
+  allergies: string[];
+  preferences: string[];
+  preparationTime: number;
+}) {
+  const client = groqClient;
+  if (!client) {
+    throw new Error('GROQ client not initialized. Please provide an API key.');
+  }
+
+  try {
+    const completion = await client.chat.completions.create({
+      messages: [
+        {
+          role: 'system',
+          content: `You are a professional nutritionist that generates personalized meal plans. Return a JSON response with this exact structure:
+
+{
+  "title": "Daily Meal Plan",
+  "description": "Description of the meal plan",
+  "targetCalories": 2000,
+  "meals": [
+    {
+      "name": "Breakfast Bowl",
+      "description": "Description of the meal",
+      "mealType": "breakfast",
+      "ingredients": ["ingredient1", "ingredient2"],
+      "servingSize": "1 bowl",
+      "macros": {
+        "protein": 20,
+        "carbohydrates": 40,
+        "fats": 10,
+        "calories": 330
+      },
+      "preparationTime": 15,
+      "instructions": ["step1", "step2"]
+    }
+  ]
+}
+
+Rules:
+1. Each meal must have all required fields
+2. Macros must be realistic and add up to total calories
+3. Instructions must be clear and detailed
+4. Return valid JSON that can be parsed`
+        },
+        {
+          role: 'user',
+          content: `Generate a ${params.dietType} meal plan with ${params.mealsPerDay} meals.
+Target calories: ${params.targetCalories}
+Allergies: ${params.allergies.join(', ')}
+Preferences: ${params.preferences.join(', ')}
+Max preparation time per meal: ${params.preparationTime} minutes
+
+Requirements:
+- Total daily calories should match target
+- Follow dietary restrictions
+- Keep prep time under limit
+- Include detailed instructions
+- Provide accurate macro calculations
+
+Return as parseable JSON matching the example format.`
+        }
+      ],
+      model: 'mixtral-8x7b-32768',
+      temperature: 0.1,
+      max_tokens: 4096,
+      response_format: { type: "json_object" },
+      stream: false,
+      top_p: 0.95,
+      frequency_penalty: 0.2
+    });
+
+    const content = completion.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error('No response from GROQ API');
+    }
+
+    try {
+      const response = JSON.parse(content.trim());
+      
+      // Validate response structure
+      if (!response.title || !response.description || !response.meals) {
+        throw new Error('Invalid response structure');
+      }
+
+      // Validate each meal
+      response.meals.forEach((meal: any, index: number) => {
+        if (!meal.name || !meal.description || !meal.mealType || 
+            !meal.ingredients || !meal.servingSize || !meal.macros || 
+            !meal.instructions) {
+          throw new Error(`Invalid meal structure at index ${index}`);
+        }
+      });
+
+      return response;
+    } catch (parseError: any) {
+      console.error('JSON Parse Error:', parseError);
+      console.error('Raw content:', content);
+      throw new Error(`Failed to parse GROQ response: ${parseError.message}`);
+    }
+  } catch (error: any) {
+    console.error('GROQ API Error:', error);
+    throw new Error(error.message || 'Failed to generate meal plan');
+  }
+}
