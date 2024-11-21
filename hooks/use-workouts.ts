@@ -27,11 +27,12 @@ export function useWorkouts() {
             title: workout.title,
             type: workout.type,
             difficulty: workout.difficulty,
-            exercises: workout.exercises,
+            exercises: workout.exercises || [],
             completed: workout.completed,
-            scheduled_date: workout.scheduledDate,
+            scheduled_date: workout.scheduled_date,
             description: workout.description || '',
-            split_type: workout.splitType,
+            split_type: workout.split_type,
+            is_rest_day: workout.is_rest_day || false,
             user_id: user.id,
           }
         ])

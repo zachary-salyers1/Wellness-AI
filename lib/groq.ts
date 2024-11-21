@@ -32,48 +32,59 @@ export async function generateWeeklyWorkouts(params: {
       messages: [
         { 
           role: 'system', 
-          content: `You are a professional fitness trainer that generates weekly workout plans. Respond with a valid JSON object containing an array of workouts. Each workout must include a title, description, dayOfWeek (1-7), and an array of exercises. Each exercise must have a name, sets, reps, and notes.
+          content: `You are a professional fitness trainer that generates weekly workout plans. Return a JSON response with this exact structure:
 
-Example format:
 {
   "workouts": [
     {
-      "title": "Workout Title",
-      "description": "Workout Description",
+      "title": "Full Body Strength",
+      "description": "Complete full body workout focusing on compound movements",
       "dayOfWeek": 1,
       "exercises": [
         {
-          "name": "Exercise Name",
-          "sets": 3,
+          "name": "Barbell Squats",
+          "sets": 4,
           "reps": 10,
-          "notes": "Exercise notes"
+          "notes": "Keep chest up, drive through heels"
         }
       ]
     }
   ]
-}`
+}
+
+Rules:
+1. Each workout MUST have exactly 4-6 exercises
+2. All fields are required
+3. dayOfWeek must be between 1-7
+4. sets and reps must be numbers
+5. notes must be a string with form instructions
+6. Return valid JSON that can be parsed`
         },
         { 
           role: 'user', 
-          content: `Create a ${params.difficulty} level ${params.type} workout plan with exactly ${params.daysPerWeek} workouts.
+          content: `Generate a ${params.daysPerWeek}-day ${params.difficulty} ${params.type} workout plan.
 Split type: ${params.splitType}
 Duration: ${params.duration} minutes
 Equipment: ${params.equipment.join(', ')}
 
 Requirements:
-- Generate exactly ${params.daysPerWeek} workouts
-- For upperLower split: alternate upper and lower body workouts
-- Space workouts throughout the week with rest days between
-- Include 4-6 exercises per workout
-- Each exercise must specify sets, reps, and form notes
-- Total workout duration should be around ${params.duration} minutes`
+- ${params.daysPerWeek} workouts total
+- 4-6 exercises per workout
+- ${params.duration} minutes per workout
+- Use only: ${params.equipment.join(', ')}
+- For upperLower split: alternate upper/lower
+- Include rest days between workouts
+
+Return as parseable JSON matching the example format.`
         }
       ],
       model: 'mixtral-8x7b-32768',
-      temperature: 0.3,
-      max_tokens: 2048,
+      temperature: 0.1, // Lower temperature for more consistent output
+      max_tokens: 4096, // Increased for longer responses
       response_format: { type: "json_object" },
-      stream: false
+      stream: false,
+      top_p: 0.95,
+      frequency_penalty: 0.2
     });
 
     const content = completion.choices[0]?.message?.content;
@@ -82,17 +93,28 @@ Requirements:
     }
     
     try {
-      const weeklyPlan = JSON.parse(content);
+      const response = JSON.parse(content.trim());
       
-      // Validate the response structure
-      if (!Array.isArray(weeklyPlan.workouts)) {
-        throw new Error('Invalid workout plan structure');
+      // Validate response structure
+      if (!response.workouts || !Array.isArray(response.workouts)) {
+        throw new Error('Invalid response structure: missing workouts array');
       }
 
-      // Validate each workout and its exercises
-      weeklyPlan.workouts.forEach((workout: any, index: number) => {
-        if (!workout.title || !workout.description || !workout.dayOfWeek || !Array.isArray(workout.exercises)) {
+      // Validate each workout
+      response.workouts.forEach((workout: any, index: number) => {
+        if (!workout.title || !workout.description || !workout.dayOfWeek) {
           throw new Error(`Invalid workout structure at index ${index}`);
+        }
+        
+        // Skip exercise validation for rest days
+        if (workout.title.toLowerCase().includes('rest day')) {
+          workout.is_rest_day = true;
+          workout.exercises = [];
+          return;
+        }
+
+        if (!Array.isArray(workout.exercises)) {
+          throw new Error(`Missing exercises array at workout ${index + 1}`);
         }
         
         if (workout.exercises.length < 4 || workout.exercises.length > 6) {
@@ -102,25 +124,26 @@ Requirements:
         workout.exercises.forEach((exercise: any, exIndex: number) => {
           if (!exercise.name || typeof exercise.sets !== 'number' || 
               typeof exercise.reps !== 'number' || !exercise.notes) {
-            throw new Error(`Invalid exercise structure at workout ${index + 1}, exercise ${exIndex + 1}`);
+            throw new Error(`Invalid exercise at workout ${index + 1}, exercise ${exIndex + 1}`);
           }
         });
       });
 
-      if (weeklyPlan.workouts.length !== params.daysPerWeek) {
-        throw new Error(`Expected ${params.daysPerWeek} workouts but received ${weeklyPlan.workouts.length}`);
+      if (response.workouts.length !== params.daysPerWeek) {
+        throw new Error(`Expected ${params.daysPerWeek} workouts but received ${response.workouts.length}`);
       }
 
-      return weeklyPlan.workouts;
+      return response.workouts;
     } catch (parseError: any) {
       console.error('JSON Parse Error:', parseError);
-      throw new Error(`Invalid workout format: ${parseError.message}`);
+      console.error('Raw content:', content);
+      throw new Error(`Failed to parse GROQ response: ${parseError.message}`);
     }
   } catch (error: any) {
-    console.error('Error generating workouts:', error);
+    console.error('GROQ API Error:', error);
     if (error.error?.failed_generation) {
-      console.error('Failed generation details:', error.error.failed_generation);
+      console.error('Failed generation:', error.error.failed_generation);
     }
-    throw new Error(error.message || 'Failed to generate workout plan. Please try again.');
+    throw new Error(error.message || 'Failed to generate workout plan');
   }
 }

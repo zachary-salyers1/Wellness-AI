@@ -193,7 +193,7 @@ export function WorkoutGenerator({ onGenerate }: { onGenerate: () => void }) {
             difficulty: data.difficulty,
             exercises: workout.exercises,
             completed: false,
-            scheduledDate: (() => {
+            scheduled_date: (() => {
               const today = new Date();
               const currentDay = today.getDay() || 7;
               const daysToAdd = (workout.dayOfWeek - currentDay + 7) % 7;
@@ -202,7 +202,8 @@ export function WorkoutGenerator({ onGenerate }: { onGenerate: () => void }) {
               return scheduledDate.toISOString();
             })(),
             description: workout.description,
-            splitType: data.splitType,
+            split_type: data.splitType,
+            is_rest_day: workout.is_rest_day || false,
           });
         } catch (error) {
           console.error('Error saving workout:', error);
