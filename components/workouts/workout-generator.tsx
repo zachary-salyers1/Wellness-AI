@@ -12,6 +12,8 @@ import { generateWorkout, initGroq } from "@/lib/groq";
 import { useWorkouts } from "@/hooks/use-workouts";
 import { DialogClose } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/use-toast";
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 
 const workoutFormSchema = z.object({
   type: z.enum(["strength", "cardio", "flexibility", "custom"]),
@@ -52,19 +54,35 @@ export function WorkoutGenerator({ onGenerate }: { onGenerate: () => void }) {
   const { createWorkout } = useWorkouts();
   const { toast } = useToast();
   const [isGroqInitialized, setIsGroqInitialized] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
-    const apiKey = process.env.NEXT_PUBLIC_GROQ_API_KEY;
-    if (apiKey) {
-      try {
-        initGroq(apiKey);
-        setIsGroqInitialized(true);
-      } catch (error) {
-        console.error('Failed to initialize GROQ client:', error);
-        setIsGroqInitialized(false);
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast({
+          title: "Authentication Required",
+          description: "Please sign in to generate workouts.",
+          variant: "destructive",
+        });
+        router.push('/auth');
+        return;
       }
-    }
-  }, []);
+
+      const apiKey = process.env.NEXT_PUBLIC_GROQ_API_KEY;
+      if (apiKey) {
+        try {
+          initGroq(apiKey);
+          setIsGroqInitialized(true);
+        } catch (error) {
+          console.error('Failed to initialize GROQ client:', error);
+          setIsGroqInitialized(false);
+        }
+      }
+    };
+
+    checkAuth();
+  }, [router, toast]);
 
   const form = useForm<WorkoutFormValues>({
     resolver: zodResolver(workoutFormSchema),
@@ -79,6 +97,17 @@ export function WorkoutGenerator({ onGenerate }: { onGenerate: () => void }) {
   async function onSubmit(data: WorkoutFormValues) {
     setIsLoading(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast({
+          title: "Session Expired",
+          description: "Please sign in again to continue.",
+          variant: "destructive",
+        });
+        router.push('/auth');
+        return;
+      }
+
       let workout;
       
       if (isGroqInitialized) {
@@ -98,12 +127,10 @@ export function WorkoutGenerator({ onGenerate }: { onGenerate: () => void }) {
 
       await createWorkout.mutateAsync({
         title: workout.title,
-        description: workout.description,
         type: data.type,
         difficulty: data.difficulty,
         exercises: workout.exercises,
         completed: false,
-        date: new Date().toISOString(),
       });
 
       toast({
